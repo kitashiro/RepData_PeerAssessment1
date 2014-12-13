@@ -7,19 +7,192 @@ output:
 
 
 ## Loading and preprocessing the data
+Start by extracting the data from the zip file, loading the uncompressed csv and converting the
+date and interval columns from text to an actual date.
+```{r prepare_data,results='hide', warning=FALSE}
+library(lubridate)
+unzip("activity.zip")
+data <- read.csv("activity.csv", header=TRUE)
+data$interval <- sapply(data$interval, function(t){h<-floor(t/100);m<-t%%100;paste(h,m,sep=":")})
+data$timestamp <- ymd_hm(paste(data$date, data$interval, sep=" "))
+data$interval <- data$date <- NULL
+```
 
-
+A random sample of the cleaned data looks like this:
+```{r sample_data}
+data[sort(sample.int(nrow(data),5)),]
+```
 
 ## What is mean total number of steps taken per day?
 
+Compute the total number of steps taken each day (ignoring NA values) using ddply to group by date and then adding all step counts.
+```{r total_steps, results='hide', warning=FALSE, message=FALSE}
+library(plyr)
+totalStepsPerDay <- ddply(data, .(format(timestamp, "%Y-%m-%d")), 
+                          function(x){sum(x$steps, na.rm=true)})
+names(totalStepsPerDay) <- c("date", "total.steps")
+```
 
+Below is a histogram that shows the frequency of the daily number of steps.
+We can see that for more than a quarter of the days the subject took 10k to 12k steps.
+Additionally we can see there are 10 days that had 0 to 2000 setps:
+```{r total_steps_histogram}
+hist(totalStepsPerDay$total.steps, xlab="Total daily steps", ylab="Frequency", 
+     main="Histogram of daily step frequencies", breaks=10)
+```
+
+Finally let's look at the mean and medium for the total daily steps.
+```{r mean_total_steps}
+meanTotalStepsPerDay <- mean(totalStepsPerDay$total.steps)
+meanTotalStepsPerDay
+```
+
+```{r median_total_steps}
+medianTotalStepsPerDay <- median(totalStepsPerDay$total.steps)
+medianTotalStepsPerDay
+```
+
+The mean total steps per day is `r formatC(meanTotalStepsPerDay, format="d", big.mark=",")`
+and the median total steps per day is `r formatC(medianTotalStepsPerDay, format="d", big.mark=",")`.
 
 ## What is the average daily activity pattern?
 
+Here is a time series plot of the average number of steps taken within a time interval over all
+days in the data. Start by computing the average per interval using ddply then plot the data.
+```{r avg_daily_activity}
+meanStepsPerInterval <- ddply(data, .(format(timestamp, "%H:%M")), 
+                              function(x){mean(x$steps, na.rm=TRUE)})
+names(meanStepsPerInterval) <- c("time.interval", "mean.steps")
+
+plot(seq_along(meanStepsPerInterval$time.interval), 
+     meanStepsPerInterval$mean.steps, 
+     xlab="Time interval", ylab="Average steps taken at interval", 
+     type="l", xaxt='n')
+title("Mean steps per time interval for all data")
+axis(side=1, 
+     at=which(minute(hm(meanStepsPerInterval$time.interval))==0), 
+     labels=meanStepsPerInterval$time.interval[minute(hm(meanStepsPerInterval$time.interval))==0])
+```
+
+```{r max_daily_activity_interval}
+highestMeanStepsInterval <- meanStepsPerInterval[meanStepsPerInterval$mean.steps==max(meanStepsPerInterval$mean.steps),]
+highestMeanStepsInterval
+```
+From the plot we can see that the interval with the highest average across all days is 
+`r highestMeanStepsInterval$time.interval` 
+with `r round(highestMeanStepsInterval$mean.steps,2)` steps.
 
 
 ## Imputing missing values
 
+```{r missing_values}
+missingValues <- sum(is.na(data$steps))
+missingValues
+```
 
+There are `r missingValues` records with missing values that can bias the results above.
+To adjust for this bias we will replace missing values with mean value over all the non-NA records
+of the same 5 minute interval.
+
+```{r data_adjusted}
+# copy data
+data.adjusted <- data
+
+# add merge key and merge
+data.adjusted$key = format(data.adjusted$timestamp,"%H:%M")
+data.adjusted <- merge(data.adjusted, meanStepsPerInterval, by.x="key", by.y="time.interval")
+
+# replace na values with mean for the same interval
+data.adjusted[is.na(data.adjusted$steps),]$steps <- data.adjusted[is.na(data.adjusted$steps),]$mean.steps
+
+# clean and order the data
+data.adjusted$key <- data.adjusted$mean.steps <- NULL
+data.adjusted <- data.adjusted[order(data.adjusted$timestamp),]
+```
+
+We can see the the new data replaces the na values with the mean values for the same intervals.
+The original data looked like this:
+```{r compare_data}
+head(data)
+```
+
+The new data looks like this:
+```{r compare_data_adjusted}
+head(data.adjusted)
+```
+
+Where the mean intervals look like this (which matches the above values):
+```{r compare_interval_means}
+head(meanStepsPerInterval)
+```
+
+Now that we have removed the NA values let's look at the distribution of total steps per day again:
+```{r total_steps_adjusted_histogram, results='hide', warning=FALSE, message=FALSE}
+# colapse the data by day and sum
+totalStepsPerDay.adjusted <- ddply(data.adjusted, .(format(timestamp, "%Y-%m-%d")), 
+                                   function(x){sum(x$steps, na.rm=true)})
+names(totalStepsPerDay.adjusted) <- c("date", "total.steps")
+
+# plot data
+hist(totalStepsPerDay.adjusted$total.steps, xlab="Total daily steps", ylab="Frequency", 
+     main="Histogram of daily step frequencies (with NA values replaced)", breaks=10)
+```
+
+We can see that the number of days with a total of 0 to 2,000 steps has reduced from 10 days to
+only 2 days.
+
+Finally let's look at the adjusted mean and medium for the total daily steps.
+```{r total_steps_adjusted_mean}
+meanTotalStepsPerDay.adjusted <- mean(totalStepsPerDay.adjusted$total.steps)
+meanTotalStepsPerDay.adjusted
+```
+
+```{r total_steps_adjusted_median}
+medianTotalStepsPerDay.adjusted <- median(totalStepsPerDay.adjusted$total.steps)
+medianTotalStepsPerDay.adjusted
+```
+
+The mean total steps per day is
+`r formatC(meanTotalStepsPerDay.adjusted, format="d", big.mark=",")`
+and the median total steps per day is
+`r formatC(medianTotalStepsPerDay.adjusted, format="d", big.mark=",")`.
+As expected both show an increase over the non-adjusted data where the NA values effectively count
+as zero for that day.
+
+Interestingly the mean and median have the same value because there were some days that were
+composed entirely of NA values.
+These days had all steps values substitued with the mean for each interval.
+It so happens that the median total steps is also one of the days that is replaced by all mean
+values.
+The results is that the mean and medium share the same value.
+This can be shown by plotting the sorted daily totals as follows:
+```{r total_steps_adjusted_distrib_plot}
+plot(sort(totalStepsPerDay.adjusted$total.steps), 
+     type="p", 
+     xlab="Days ordered by total steps per day", 
+     ylab="Total steps for the day")
+abline(h=mean(totalStepsPerDay.adjusted$total.steps), lty=2)
+legend(x=3, y=20000, c("Total daily steps", "Mean of total steps"), 
+       pch=c(1,NA), lty=c(NA,2))
+title("Total steps per day")
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+Now we will compare steps taken on the weekend with steps taken on a weekday.
+Start by assigning a new factor variable to the data indicating if the data point is a weekend or
+a weekday.
+
+```{r add_weekend_factor}
+data.adjusted$day.type <- factor(
+  weekdays(data.adjusted$timestamp,abbreviate=TRUE) %in% c("Sun","Sat"), 
+  levels=c(FALSE,TRUE), 
+  labels=c("weekday","weekend"))
+```
+
+
+
+
+
+
+Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis). The plot should look something like the following, which was created using simulated data:

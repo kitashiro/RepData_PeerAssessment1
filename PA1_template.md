@@ -9,7 +9,8 @@ output:
 ## Loading and preprocessing the data
 Start by extracting the data from the zip file, loading the uncompressed csv and converting the
 date and interval columns from text to an actual date.
-```{r prepare_data,results='hide', warning=FALSE}
+
+```r
 library(lubridate)
 unzip("activity.zip")
 data <- read.csv("activity.csv", header=TRUE)
@@ -19,14 +20,25 @@ data$interval <- data$date <- NULL
 ```
 
 A random sample of the cleaned data looks like this:
-```{r sample_data}
+
+```r
 data[sort(sample.int(nrow(data),5)),]
+```
+
+```
+##       steps           timestamp
+## 1705      0 2012-10-06 22:00:00
+## 2135     NA 2012-10-08 09:50:00
+## 10286    57 2012-11-05 17:05:00
+## 15624     6 2012-11-24 05:55:00
+## 16441     0 2012-11-27 02:00:00
 ```
 
 ## What is mean total number of steps taken per day?
 
 Compute the total number of steps taken each day (ignoring NA values) using ddply to group by date and then adding all step counts.
-```{r total_steps, results='hide', warning=FALSE, message=FALSE}
+
+```r
 library(plyr)
 totalStepsPerDay <- ddply(data, .(format(timestamp, "%Y-%m-%d")), 
                           function(x){sum(x$steps, na.rm=true)})
@@ -36,30 +48,44 @@ names(totalStepsPerDay) <- c("date", "total.steps")
 Below is a histogram that shows the frequency of the daily number of steps.
 We can see that for more than a quarter of the days the subject took 10k to 12k steps.
 Additionally we can see there are 10 days that had 0 to 2000 setps:
-```{r total_steps_histogram}
+
+```r
 hist(totalStepsPerDay$total.steps, xlab="Total daily steps", ylab="Frequency", 
      main="Histogram of daily step frequencies", breaks=10)
 ```
 
+![plot of chunk total_steps_histogram](figure/total_steps_histogram-1.png) 
+
 Finally let's look at the mean and medium for the total daily steps.
-```{r mean_total_steps}
+
+```r
 meanTotalStepsPerDay <- mean(totalStepsPerDay$total.steps)
 meanTotalStepsPerDay
 ```
 
-```{r median_total_steps}
+```
+## [1] 9354.23
+```
+
+
+```r
 medianTotalStepsPerDay <- median(totalStepsPerDay$total.steps)
 medianTotalStepsPerDay
 ```
 
-The mean total steps per day is `r formatC(meanTotalStepsPerDay, format="d", big.mark=",")`
-and the median total steps per day is `r formatC(medianTotalStepsPerDay, format="d", big.mark=",")`.
+```
+## [1] 10395
+```
+
+The mean total steps per day is 9,354
+and the median total steps per day is 10,395.
 
 ## What is the average daily activity pattern?
 
 Here is a time series plot of the average number of steps taken within a time interval over all
 days in the data. Start by computing the average per interval using ddply then plot the data.
-```{r avg_daily_activity}
+
+```r
 meanStepsPerInterval <- ddply(data, .(format(timestamp, "%H:%M")), 
                               function(x){mean(x$steps, na.rm=TRUE)})
 names(meanStepsPerInterval) <- c("time.interval", "mean.steps")
@@ -74,27 +100,41 @@ axis(side=1,
      labels=meanStepsPerInterval$time.interval[minute(hm(meanStepsPerInterval$time.interval))==0])
 ```
 
-```{r max_daily_activity_interval}
+![plot of chunk avg_daily_activity](figure/avg_daily_activity-1.png) 
+
+
+```r
 highestMeanStepsInterval <- meanStepsPerInterval[meanStepsPerInterval$mean.steps==max(meanStepsPerInterval$mean.steps),]
 highestMeanStepsInterval
 ```
+
+```
+##     time.interval mean.steps
+## 104         08:35   206.1698
+```
 From the plot we can see that the interval with the highest average across all days is 
-`r highestMeanStepsInterval$time.interval` 
-with `r round(highestMeanStepsInterval$mean.steps,2)` steps.
+08:35 
+with 206.17 steps.
 
 
 ## Imputing missing values
 
-```{r missing_values}
+
+```r
 missingValues <- sum(is.na(data$steps))
 missingValues
 ```
 
-There are `r missingValues` records with missing values that can bias the results above.
+```
+## [1] 2304
+```
+
+There are 2304 records with missing values that can bias the results above.
 To adjust for this bias we will replace missing values with mean value over all the non-NA records
 of the same 5 minute interval.
 
-```{r data_adjusted}
+
+```r
 # copy data
 data.adjusted <- data
 
@@ -112,22 +152,56 @@ data.adjusted <- data.adjusted[order(data.adjusted$timestamp),]
 
 We can see the the new data replaces the na values with the mean values for the same intervals.
 The original data looked like this:
-```{r compare_data}
+
+```r
 head(data)
 ```
 
+```
+##   steps           timestamp
+## 1    NA 2012-10-01 00:00:00
+## 2    NA 2012-10-01 00:05:00
+## 3    NA 2012-10-01 00:10:00
+## 4    NA 2012-10-01 00:15:00
+## 5    NA 2012-10-01 00:20:00
+## 6    NA 2012-10-01 00:25:00
+```
+
 The new data looks like this:
-```{r compare_data_adjusted}
+
+```r
 head(data.adjusted)
 ```
 
+```
+##         steps           timestamp
+## 1   1.7169811 2012-10-01 00:00:00
+## 63  0.3396226 2012-10-01 00:05:00
+## 128 0.1320755 2012-10-01 00:10:00
+## 205 0.1509434 2012-10-01 00:15:00
+## 264 0.0754717 2012-10-01 00:20:00
+## 327 2.0943396 2012-10-01 00:25:00
+```
+
 Where the mean intervals look like this (which matches the above values):
-```{r compare_interval_means}
+
+```r
 head(meanStepsPerInterval)
 ```
 
+```
+##   time.interval mean.steps
+## 1         00:00  1.7169811
+## 2         00:05  0.3396226
+## 3         00:10  0.1320755
+## 4         00:15  0.1509434
+## 5         00:20  0.0754717
+## 6         00:25  2.0943396
+```
+
 Now that we have removed the NA values let's look at the distribution of total steps per day again:
-```{r total_steps_adjusted_histogram, results='hide', warning=FALSE, message=FALSE}
+
+```r
 # colapse the data by day and sum
 totalStepsPerDay.adjusted <- ddply(data.adjusted, .(format(timestamp, "%Y-%m-%d")), 
                                    function(x){sum(x$steps, na.rm=true)})
@@ -138,24 +212,36 @@ hist(totalStepsPerDay.adjusted$total.steps, xlab="Total daily steps", ylab="Freq
      main="Histogram of daily step frequencies (with NA values replaced)", breaks=10)
 ```
 
+![plot of chunk total_steps_adjusted_histogram](figure/total_steps_adjusted_histogram-1.png) 
+
 We can see that the number of days with a total of 0 to 2,000 steps has reduced from 10 days to
 only 2 days.
 
 Finally let's look at the adjusted mean and medium for the total daily steps.
-```{r total_steps_adjusted_mean}
+
+```r
 meanTotalStepsPerDay.adjusted <- mean(totalStepsPerDay.adjusted$total.steps)
 meanTotalStepsPerDay.adjusted
 ```
 
-```{r total_steps_adjusted_median}
+```
+## [1] 10766.19
+```
+
+
+```r
 medianTotalStepsPerDay.adjusted <- median(totalStepsPerDay.adjusted$total.steps)
 medianTotalStepsPerDay.adjusted
 ```
 
+```
+## [1] 10766.19
+```
+
 The mean total steps per day is
-`r formatC(meanTotalStepsPerDay.adjusted, format="d", big.mark=",")`
+10,766
 and the median total steps per day is
-`r formatC(medianTotalStepsPerDay.adjusted, format="d", big.mark=",")`.
+10,766.
 As expected both show an increase over the non-adjusted data where the NA values effectively count
 as zero for that day.
 
@@ -166,7 +252,8 @@ It so happens that the median total steps is also one of the days that is replac
 values.
 The results is that the mean and medium share the same value.
 This can be shown by plotting the sorted daily totals as follows:
-```{r total_steps_adjusted_distrib_plot}
+
+```r
 plot(sort(totalStepsPerDay.adjusted$total.steps), 
      type="p", 
      xlab="Days ordered by total steps per day", 
@@ -177,13 +264,16 @@ legend(x=3, y=20000, c("Total daily steps", "Mean of total steps"),
 title("Total steps per day")
 ```
 
+![plot of chunk total_steps_adjusted_distrib_plot](figure/total_steps_adjusted_distrib_plot-1.png) 
+
 ## Are there differences in activity patterns between weekdays and weekends?
 
 Now we will compare steps taken on the weekend with steps taken on a weekday.
 Start by assigning a new factor variable to the data indicating if the data point is a weekend or
 a weekday.
 
-```{r add_weekend_factor}
+
+```r
 data.adjusted$day.type <- factor(
   weekdays(data.adjusted$timestamp,abbreviate=TRUE) %in% c("Sun","Sat"), 
   levels=c(FALSE,TRUE), 
@@ -191,12 +281,23 @@ data.adjusted$day.type <- factor(
 ```
 
 Here is what a sample of the data looks like now:
-```{r sample_with_weekend_factor}
+
+```r
 data.adjusted[sort(sample.int(nrow(data.adjusted),5)),]
 ```
 
+```
+##          steps           timestamp day.type
+## 16877 0.000000 2012-10-15 23:00:00  weekday
+## 9985  0.000000 2012-10-25 13:35:00  weekday
+## 8174  5.000000 2012-10-28 11:05:00  weekend
+## 8406  0.000000 2012-11-07 11:25:00  weekday
+## 16066 2.622642 2012-11-14 21:55:00  weekday
+```
+
 Plot a time series of the intervals and average number of steps taken across weekdays and weekends:
-```{r weekday_vs_weekend_activity}
+
+```r
 # compute mean steps per interval for the weekdays
 meanStepsPerInterval.weekday <- ddply(data.adjusted[data.adjusted$day.type=="weekday",], 
                                       .(format(timestamp, "%H:%M")), 
@@ -229,6 +330,8 @@ xyplot(mean.steps ~ time.interval | day.type, meanStepsPerInterval.all,
          x=list(
            at=label.pos, labels=meanStepsPerInterval.weekday$time.interval[label.pos])))
 ```
+
+![plot of chunk weekday_vs_weekend_activity](figure/weekday_vs_weekend_activity-1.png) 
 
 The plot shows that weekdays have a large number of steps in the early morning around 9am followed
 by limited motion throughout the day with some spikes late in the day (perhaps after work).
